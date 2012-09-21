@@ -106,12 +106,12 @@ $(dist_archives): $(dist_files)
 	 rsync -r --relative $(source_dist_files) $$dir) && \
 	cp $(built_dist_files) $$dir && \
 	(cd $$tmpdir && \
-    tarcompression= && \
-    case $@ in \
-        *.bz2) tarcompression=-j ;; \
-        *.gz) tarcompression=-z ;; \
-        *.xz) tarcompression=-J ;; \
-     esac && \
+	 tarcompression= && \
+	 case $@ in \
+	     *.bz2) tarcompression=-j ;; \
+	     *.gz) tarcompression=-z ;; \
+	     *.xz) tarcompression=-J ;; \
+	 esac && \
 	 tar -c $$tarcompression -f $(CURDIR)/$@ $(dist_dir)) && \
 	rm -rf $$tmpdir
 

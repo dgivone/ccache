@@ -2006,7 +2006,12 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 
 		/* other options */
 		if (argv[i][0] == '-') {
-			args_add(stripped_args, argv[i]);
+			if (compopt_affects_cpp(argv[i]) || 
+			    compopt_prefix_affects_cpp(argv[i])) {
+				args_add(cpp_args, argv[i]);
+			} else {
+				args_add(stripped_args, argv[i]);
+			}
 			continue;
 		}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Joel Rosdahl
+ * Copyright (C) 2010, 2012 Joel Rosdahl
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -34,7 +34,7 @@ struct compopt {
 static const struct compopt compopts[] = {
 	{"--coverage",      TOO_HARD}, /* implies -ftest-coverage */
 	{"--param",         TAKES_ARG},
-	{"--serialize-diagnostics", TAKES_ARG | TAKES_PATH},	
+	{"--serialize-diagnostics", TAKES_ARG | TAKES_PATH},
 	{"-A",              TAKES_ARG},
 	{"-D",              AFFECTS_CPP | TAKES_ARG | TAKES_CONCAT_ARG},
 	{"-E",              TOO_HARD},
@@ -59,7 +59,7 @@ static const struct compopt compopts[] = {
 	{"-fno-working-directory", AFFECTS_CPP},
 	{"-frepo",          TOO_HARD},
 	{"-ftest-coverage", TOO_HARD}, /* generates a .gcno file at the same time */
-	{"-fworking-directory", AFFECTS_CPP},	
+	{"-fworking-directory", AFFECTS_CPP},
 	{"-idirafter",      AFFECTS_CPP | TAKES_ARG | TAKES_PATH},
 	{"-iframework",     AFFECTS_CPP | TAKES_ARG | TAKES_CONCAT_ARG | TAKES_PATH},
 	{"-imacros",        AFFECTS_CPP | TAKES_ARG | TAKES_PATH},
@@ -180,9 +180,8 @@ compopt_takes_arg(const char *option)
 	return co && (co->type & TAKES_ARG);
 }
 
-/* determines if argument takes a concatentated argument
-   by comparing prefixes
-*/
+/* Determines if argument takes a concatentated argument by comparing prefixes.
+ */
 bool
 compopt_takes_concat_arg(const char *option)
 {
@@ -190,14 +189,13 @@ compopt_takes_concat_arg(const char *option)
 	return co && (co->type & TAKES_CONCAT_ARG);
 }
 
-/* determines if the prefix of the option matches
-   any option and affects the preprocessor
-*/
+/* Determines if the prefix of the option matches any option and affects the
+ * preprocessor.
+ */
 bool
 compopt_prefix_affects_cpp(const char *option)
 {
 	/* prefix options have to take concatentated args */
 	const struct compopt *co = find_prefix(option);
-	return co && (co->type & TAKES_CONCAT_ARG) && 
-				 (co->type & AFFECTS_CPP);
+	return co && (co->type & TAKES_CONCAT_ARG) && (co->type & AFFECTS_CPP);
 }

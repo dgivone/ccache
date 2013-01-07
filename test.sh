@@ -3,7 +3,7 @@
 # A simple test suite for ccache.
 #
 # Copyright (C) 2002-2007 Andrew Tridgell
-# Copyright (C) 2009-2012 Joel Rosdahl
+# Copyright (C) 2009-2013 Joel Rosdahl
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -64,7 +64,6 @@ randcode() {
     ) >> "$outfile"
 }
 
-
 getstat() {
     stat="$1"
     value=`$CCACHE -s | grep "$stat" | cut -c34-`
@@ -81,7 +80,8 @@ checkstat() {
 }
 
 compare_file() {
-    if ! cmp -s "$1" "$2"; then
+    cmp -s "$1" "$2"
+    if [ $? -ne 0 ]; then
         test_failed "Files differ: $1 != $2"
     fi
 }
@@ -293,7 +293,6 @@ base_tests() {
     checkstat 'cache miss' 7
     CCACHE_DISABLE=1 $COMPILER -c test1.c -o reference_test1.o
     compare_file reference_test1.o test1.o
-
 
     testname="cache-size"
     for f in *.c; do
@@ -583,6 +582,36 @@ EOF
         checkstat 'files in cache' 4
     fi
 
+    ##################################################################
+    # Check that -Wp,-P disables ccache. (-P removes preprocessor information
+    # in such a way that the object file from compiling the preprocessed file
+    # will not be equal to the object file produced when compiling without
+    # ccache.)
+    testname="-Wp,-P"
+    $CCACHE -Cz >/dev/null
+    $CCACHE_COMPILE -c -Wp,-P test1.c
+    checkstat 'cache hit (direct)' 0
+    checkstat 'cache hit (preprocessed)' 0
+    checkstat 'cache miss' 0
+    checkstat 'unsupported compiler option' 1
+    $CCACHE_COMPILE -c -Wp,-P test1.c
+    checkstat 'cache hit (direct)' 0
+    checkstat 'cache hit (preprocessed)' 0
+    checkstat 'cache miss' 0
+    checkstat 'unsupported compiler option' 2
+    $CCACHE_COMPILE -c -Wp,-DFOO,-P,-DGOO test1.c
+    checkstat 'cache hit (direct)' 0
+    checkstat 'cache hit (preprocessed)' 0
+    checkstat 'cache miss' 0
+    checkstat 'unsupported compiler option' 3
+    $CCACHE_COMPILE -c -Wp,-DFOO,-P,-DGOO test1.c
+    checkstat 'cache hit (direct)' 0
+    checkstat 'cache hit (preprocessed)' 0
+    checkstat 'cache miss' 0
+    checkstat 'unsupported compiler option' 4
+
+    ##################################################################
+
     if [ $COMPILER_TYPE_CLANG -eq 1 ]; then
         $CCACHE -Cz > /dev/null
         testname="serialize-diagnostics"
@@ -597,35 +626,7 @@ EOF
     fi
 
     ##################################################################
-    # Check that -Wp,-P disables ccache. (-P removes preprocessor information
-    # in such a way that the object file from compiling the preprocessed file
-    # will not be equal to the object file produced when compiling without
-    # ccache.)
-    testname="-Wp,-P"
-    $CCACHE -Cz >/dev/null
-    $CCACHE $COMPILER -c -Wp,-P test1.c
-    checkstat 'cache hit (direct)' 0
-    checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 0
-    checkstat 'unsupported compiler option' 1
-    $CCACHE $COMPILER -c -Wp,-P test1.c
-    checkstat 'cache hit (direct)' 0
-    checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 0
-    checkstat 'unsupported compiler option' 2
-    $CCACHE $COMPILER -c -Wp,-DFOO,-P,-DGOO test1.c
-    checkstat 'cache hit (direct)' 0
-    checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 0
-    checkstat 'unsupported compiler option' 3
-    $CCACHE $COMPILER -c -Wp,-DFOO,-P,-DGOO test1.c
-    checkstat 'cache hit (direct)' 0
-    checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 0
-    checkstat 'unsupported compiler option' 4
 
-    ##################################################################
-    
     rm -f test1.c
 }
 
@@ -854,46 +855,6 @@ EOF
     rm -f other.d
 
     ##################################################################
-    # Check that -Wp,-MD,file.d,-P disables direct mode.
-    # currently clang does not support -Wp form of options
-    if [ $COMPILER_TYPE_GCC -eq 1 ]; then
-        testname="-Wp,-MD,file.d,-P"
-        $CCACHE -z >/dev/null
-        $CCACHE $COMPILER -c -Wp,-MD,$DEVNULL,-P test.c
-        checkstat 'cache hit (direct)' 0
-        checkstat 'cache hit (preprocessed)' 0
-        checkstat 'cache miss' 1
-        CCACHE_DISABLE=1 $COMPILER -c -Wp,-MD,$DEVNULL,-P test.c -o compiler_direct_test.o
-        compare_file reference_test.o test.o
-
-        $CCACHE $COMPILER -c -Wp,-MD,$DEVNULL,-P test.c
-        checkstat 'cache hit (direct)' 0
-        checkstat 'cache hit (preprocessed)' 1
-        checkstat 'cache miss' 1
-        compare_file reference_test.o test.o
-    fi
-
-    ##################################################################
-    # Check that -Wp,-MMD,file.d,-P disables direct mode.
-    # currently clang does not support -Wp form of options
-    if [ $COMPILER_TYPE_GCC -eq 1 ]; then
-        testname="-Wp,-MDD,file.d,-P"
-        $CCACHE -z >/dev/null
-        $CCACHE $COMPILER -c -Wp,-MMD,$DEVNULL,-P test.c
-        checkstat 'cache hit (direct)' 0
-        checkstat 'cache hit (preprocessed)' 0
-        checkstat 'cache miss' 1
-        CCACHE_DISABLE=1 $COMPILER -c -Wp,-MMD,$DEVNULL,-P test.c -o compiler_direct_test.o
-        compare_file compiler_direct_test.o test.o
-
-        $CCACHE $COMPILER -c -Wp,-MMD,$DEVNULL,-P test.c
-        checkstat 'cache hit (direct)' 0
-        checkstat 'cache hit (preprocessed)' 1
-        checkstat 'cache miss' 1
-        compare_file reference_test.o test.o
-    fi
-
-    ##################################################################
     # Test some header modifications to get multiple objects in the manifest.
     testname="several objects"
     $CCACHE -z >/dev/null
@@ -918,7 +879,6 @@ EOF
     checkfile test.d "test.o: test.c test1.h test3.h test2.h"
     CCACHE_DISABLE=1 $COMPILER -c -MD test.c -o reference_test.o
     compare_file reference_test.o test.o
-
 
     rm -f test.d
 
@@ -1596,8 +1556,6 @@ EOF
         checkstat 'files in cache' 4
         cd ..
     fi
-
-
 }
 
 compression_suite() {
@@ -1946,7 +1904,6 @@ int main()
 }
 EOF
 
-
     if $COMPILER $SYSROOT -fpch-preprocess pch.h 2>/dev/null && [ -f pch.h.gch ] && $COMPILER $SYSROOT pch.c -o pch; then
         rm pch.h.gch
     else
@@ -1954,24 +1911,22 @@ EOF
         return
     fi
 
-    # clang and gcc handle precompiled headers similarly, but gcc
-    # is much more forgiving with precompiled headers. Both gcc and clang keep
-    # an absolute path reference to original file that created except that
-    # clang uses that reference to validate the pch and gcc ignores the reference.
-    # Also, clang has an additional feature: pre-tokenized headers. For these
-    # reasons clang should be tested separately than gcc.
-    # clang can only use pch or pth headers on the command line and not as an #include
-    # statement inside a source file
+    # clang and gcc handle precompiled headers similarly, but gcc is much more
+    # forgiving with precompiled headers. Both gcc and clang keep an absolute
+    # path reference to the original file except that clang uses that reference
+    # to validate the pch and gcc ignores the reference. Also, clang has an
+    # additional feature: pre-tokenized headers. For these reasons clang should
+    # be tested separately than gcc. clang can only use pch or pth headers on
+    # the command line and not as an #include statement inside a source file.
 
     if [ $COMPILER_TYPE_CLANG -eq 1 ]; then
         clang_pch_suite
     else
         gcc_pch_suite
-    fi    
+    fi
 }
 
 gcc_pch_suite() {
-
     ##################################################################
     # Tests for creating a .gch.
 
@@ -2095,8 +2050,6 @@ gcc_pch_suite() {
 }
 
 clang_pch_suite() {
-
-
     ##################################################################
     # Tests for creating a .gch.
 
@@ -2151,7 +2104,7 @@ clang_pch_suite() {
     CCACHE_SLOPPINESS=time_macros $CCACHE $COMPILER $SYSROOT -c -include pch.h pch2.c 2>/dev/null
     checkstat 'cache hit (direct)' 0
     checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 1    
+    checkstat 'cache miss' 1
     CCACHE_SLOPPINESS=time_macros $CCACHE $COMPILER $SYSROOT -c -include pch.h pch2.c 2>/dev/null
     checkstat 'cache hit (direct)' 1
     checkstat 'cache hit (preprocessed)' 0
@@ -2189,7 +2142,6 @@ clang_pch_suite() {
     checkstat 'cache miss' 2
 
     rm pch.h.gch
-    
 
     ##################################################################
     # Tests for creating a .pth.
@@ -2209,7 +2161,7 @@ clang_pch_suite() {
     checkstat 'cache miss' 1
     if [ ! -f pch.h.pth ]; then
         test_failed "pch.h.pth missing"
-    fi    
+    fi
 
     ##################################################################
     # Tests for using a .pth.
@@ -2230,7 +2182,7 @@ clang_pch_suite() {
     CCACHE_SLOPPINESS=time_macros $CCACHE $COMPILER $SYSROOT -c -include pch.h pch2.c 2>/dev/null
     checkstat 'cache hit (direct)' 0
     checkstat 'cache hit (preprocessed)' 0
-    checkstat 'cache miss' 1    
+    checkstat 'cache miss' 1
     CCACHE_SLOPPINESS=time_macros $CCACHE $COMPILER $SYSROOT -c -include pch.h pch2.c 2>/dev/null
     checkstat 'cache hit (direct)' 1
     checkstat 'cache hit (preprocessed)' 0
@@ -2268,7 +2220,6 @@ clang_pch_suite() {
     checkstat 'cache miss' 2
 
     rm pch.h.pth
-
 }
 
 upgrade_suite() {
@@ -2315,6 +2266,14 @@ b"
 ######################################################################
 # main program
 
+if pwd | grep '[^A-Za-z0-9/.,=_%+-]' >/dev/null 2>&1; then
+    cat <<EOF
+Error: The test suite doesn't work in directories with whitespace or other
+funny characters in the name. Sorry.
+EOF
+    exit 1
+fi
+
 suites="$*"
 if [ -n "$CC" ]; then
     COMPILER="$CC"
@@ -2324,7 +2283,6 @@ fi
 if [ -z "$CCACHE" ]; then
     CCACHE=`pwd`/ccache
 fi
-
 
 # save the type of compiler because some test may not work on all compilers
 COMPILER_TYPE_CLANG=0
@@ -2360,7 +2318,6 @@ case $host_os in
         ;;
 esac
 
-
 TESTDIR=testdir.$$
 rm -rf $TESTDIR
 mkdir $TESTDIR
@@ -2376,21 +2333,21 @@ touch $CCACHE_CONFIGPATH
 
 
 if [ $HOST_OS_APPLE -eq 1 ]; then
-    # grab the developer directory from the environment if not try xcode-select
+    # Grab the developer directory from the environment or try xcode-select
     if [ "$XCODE_DEVELOPER_DIR" = "" ]; then
-        XCODE_DEVELOPER_DIR=$(xcode-select --print-path)
+      XCODE_DEVELOPER_DIR=`xcode-select --print-path`
       if [ "$XCODE_DEVELOPER_DIR" = "" ]; then
-        echo "Error: XCODE_DEVELOPER_DIR environment variable not set and xcode-select path not set."
+        echo "Error: XCODE_DEVELOPER_DIR environment variable not set and xcode-select path not set"
         exit 1
       fi
     fi
 
-    # choose the latest SDK if a sdk root is not set
+    # Choose the latest SDK if an SDK root is not set
     MAC_PLATFORM_DIR=$XCODE_DEVELOPER_DIR/Platforms/MacOSX.platform
     if [ "$SDKROOT" = "" ]; then
         SDKROOT="`eval ls -f -1 -d \"$MAC_PLATFORM_DIR/Developer/SDKs/\"*.sdk | tail -1`"
         if [ "$SDKROOT" = "" ]; then
-            echo "Error: Cannot find a valid sdk root directory"
+            echo "Error: Cannot find a valid SDK root directory"
             exit 1
         fi
     fi
@@ -2399,10 +2356,6 @@ if [ $HOST_OS_APPLE -eq 1 ]; then
 else
     SYSROOT=
 fi
-
-# comand used to bypass ccache
-DIRECT_COMPILE=`which $COMPILER`
-
 
 # ---------------------------------------
 
@@ -2448,7 +2401,7 @@ if [ -z "$suites" ]; then
 fi
 
 for suite in $suites; do
-   run_suite $suite
+    run_suite $suite
 done
 
 # ---------------------------------------

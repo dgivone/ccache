@@ -2,7 +2,7 @@
  * ccache -- a fast C/C++ compiler cache
  *
  * Copyright (C) 2002-2007 Andrew Tridgell
- * Copyright (C) 2009-2012 Joel Rosdahl
+ * Copyright (C) 2009-2013 Joel Rosdahl
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -95,7 +95,7 @@ static char *output_obj;
 /* The path to the dependency file (implicit or specified with -MF). */
 static char *output_dep;
 
-/* diagnostic generation information (clang) */
+/* Diagnostic generation information (clang). */
 static char *output_dia = NULL;
 
 /*
@@ -562,10 +562,8 @@ process_preprocessed_file(struct mdfour *hash, const char *path)
 	hash_buffer(hash, p, (end - p));
 	free(data);
 
-	/*
-	 * Explicitly check the .gch/.pch/.pth file, Clang does not include any mention of
-	 * it in the preprocessed output.
-	 */
+	/* Explicitly check the .gch/.pch/.pth file, Clang does not include any
+	 * mention of it in the preprocessed output. */
 	if (included_pch_file) {
 		char *path = x_strdup(included_pch_file);
 		path = make_relative_path(path);
@@ -603,8 +601,8 @@ to_cache(struct args *args)
 	args_add(args, "-o");
 	args_add(args, tmp_obj);
 
-	if( output_dia != 0 ) {
-		if( output_to_real_object_first ) {
+	if (output_dia) {
+		if (output_to_real_object_first) {
 			tmp_dia = x_strdup(output_dia);
 			cc_log("Outputting to final destination: %s", tmp_dia);
 		} else {
@@ -634,8 +632,13 @@ to_cache(struct args *args)
 	args_pop(args, 3);
 
 	if (stat(tmp_stdout, &st) != 0) {
-		fatal("Could not stat %s (permission denied when creating?): %s",
-		      tmp_stdout, strerror(errno));
+		/* The stdout file was removed - cleanup in progress? Better bail out. */
+		cc_log("%s not found: %s", tmp_stdout, strerror(errno));
+		stats_update(STATS_MISSING);
+		tmp_unlink(tmp_stdout);
+		tmp_unlink(tmp_stderr);
+		tmp_unlink(tmp_obj);
+		failed();
 	}
 	if (st.st_size != 0) {
 		cc_log("Compiler produced stdout");
@@ -643,7 +646,7 @@ to_cache(struct args *args)
 		tmp_unlink(tmp_stdout);
 		tmp_unlink(tmp_stderr);
 		tmp_unlink(tmp_obj);
-		if( tmp_dia != 0 ) {
+		if (tmp_dia) {
 			tmp_unlink(tmp_dia);
 		}
 		failed();
@@ -712,7 +715,7 @@ to_cache(struct args *args)
 
 		tmp_unlink(tmp_stderr);
 		tmp_unlink(tmp_obj);
-		if( tmp_dia != 0 ) {
+		if (tmp_dia) {
 			tmp_unlink(tmp_dia);
 		}
 		failed();
@@ -757,7 +760,7 @@ to_cache(struct args *args)
 		}
 	}
 
-	if( tmp_dia != 0 ) {
+	if (tmp_dia) {
 		if (stat(tmp_dia, &st) != 0) {
 			cc_log("Failed to stat %s: %s", tmp_dia, strerror(errno));
 			stats_update(STATS_ERROR);
@@ -777,11 +780,13 @@ to_cache(struct args *args)
 					stats_update(STATS_ERROR);
 					failed();
 				}
-			} else if (move_uncompressed_file( tmp_dia, cached_dia,
-						    conf->compression ? conf->compression_level : 0) != 0) {
-						cc_log("Failed to move %s to %s: %s", tmp_dia, cached_dia, strerror(errno));
-						stats_update(STATS_ERROR);
-						failed();
+			} else if (move_uncompressed_file(
+				           tmp_dia, cached_dia,
+				           conf->compression ? conf->compression_level : 0) != 0) {
+				cc_log("Failed to move %s to %s: %s", tmp_dia, cached_dia,
+				       strerror(errno));
+				stats_update(STATS_ERROR);
+				failed();
 			}
 			cc_log("Stored in cache: %s", cached_dia);
 			stat(cached_dia, &st);
@@ -1274,7 +1279,7 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 	}
 
 	/* Check if the diagnostic file is there. */
-	if ((output_dia != 0) && (stat(cached_dia, &st) != 0)) {
+	if (output_dia && stat(cached_dia, &st) != 0) {
 		cc_log("Diagnostic file %s not in cache", cached_dia);
 		return;
 	}
@@ -1318,7 +1323,7 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 		x_unlink(cached_stderr);
 		x_unlink(cached_obj);
 		x_unlink(cached_dep);
-		x_unlink(cached_dia);		
+		x_unlink(cached_dia);
 		return;
 	} else {
 		cc_log("Created %s from %s", output_obj, cached_obj);
@@ -1351,15 +1356,14 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 			x_unlink(cached_stderr);
 			x_unlink(cached_obj);
 			x_unlink(cached_dep);
-			x_unlink(cached_dia);			
+			x_unlink(cached_dia);
 			return;
 		} else {
 			cc_log("Created %s from %s", output_dep, cached_dep);
 		}
 	}
 
-	if ( output_dia != 0 ) {
-		cc_log("[from_cache]: output_dia: %s", output_dia);
+	if (output_dia) {
 		x_unlink(output_dia);
 		/* only make a hardlink if the cache file is uncompressed */
 		if (conf->hard_link && !file_is_compressed(cached_dia)) {
@@ -1367,7 +1371,6 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 		} else {
 			ret = copy_file(cached_dia, output_dia, 0);
 		}
-				cc_log("[from_cache]: ret: %d", ret);
 
 		if (ret == -1) {
 			if (errno == ENOENT) {
@@ -1388,7 +1391,7 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 			x_unlink(output_dia);
 			x_unlink(cached_stderr);
 			x_unlink(cached_obj);
-			x_unlink(cached_dep);		
+			x_unlink(cached_dep);
 			x_unlink(cached_dia);
 			return;
 		} else {
@@ -1404,8 +1407,8 @@ from_cache(enum fromcache_call_mode mode, bool put_object_in_manifest)
 	if (produce_dep_file) {
 		update_mtime(cached_dep);
 	}
-	if(output_dia != 0) {
-		update_mtime(cached_dia);		
+	if (output_dia) {
+		update_mtime(cached_dia);
 	}
 
 	if (generating_dependencies && mode != FROMCACHE_DIRECT_MODE) {
@@ -1629,8 +1632,8 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 		}
 
 		if (str_eq(argv[i], "-fpch-preprocess")
-			  || str_eq(argv[i], "-emit-pch")
-			  || str_eq(argv[i], "-emit-pth")) {
+		    || str_eq(argv[i], "-emit-pch")
+		    || str_eq(argv[i], "-emit-pth")) {
 			found_fpch_preprocess = true;
 		}
 
@@ -1902,12 +1905,10 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 		}
 
 		/*
-		 * Options taking an argument that that we may want to rewrite
-		 * to relative paths to get better hit rate. A secondary effect
-		 * is that paths in the standard error output produced by the
-		 * compiler will be normalized.
+		 * Options taking an argument that we may want to rewrite to relative paths
+		 * to get better hit rate. A secondary effect is that paths in the standard
+		 * error output produced by the compiler will be normalized.
 		 */
-
 		if (compopt_takes_path(argv[i])) {
 			char *relpath;
 			char *pch_file = NULL;
@@ -1918,9 +1919,6 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 				goto out;
 			}
 
-			/* if the argument only affects the preprocessed output then
-			 * it should not affect the compiling the .c file
-			 */
 			relpath = make_relative_path(x_strdup(argv[i+1]));
 			if (compopt_affects_cpp(argv[i])) {
 				args_add(cpp_args, argv[i]);
@@ -1931,8 +1929,8 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 			}
 
 			/* Try to be smart about detecting precompiled headers */
-			if (str_eq(argv[i], "-include-pch") ||
-				  str_eq(argv[i], "-include-pth")) {
+			if (str_eq(argv[i], "-include-pch")
+			    || str_eq(argv[i], "-include-pth")) {
 				if (stat(argv[i+1], &st) == 0) {
 					cc_log("Detected use of precompiled header: %s", argv[i+1]);
 					found_pch = true;
@@ -1950,12 +1948,11 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 						cc_log("Detected use of precompiled header: %s", pchpath);
 						found_pch = true;
 						pch_file = x_strdup(pchpath);
-					}
-					else {
-						/* clang may use pre-tokenized headers */
+					} else {
+						/* clang may use pretokenized headers */
 						char *pthpath = format("%s.pth", argv[i+1]);
 						if (stat(pthpath, &st) == 0) {
-							cc_log("Detected use of precompiled header: %s", pthpath);
+							cc_log("Detected use of pretokenized header: %s", pthpath);
 							found_pch = true;
 							pch_file = x_strdup(pthpath);
 						}
@@ -1989,9 +1986,6 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 			relpath = make_relative_path(x_strdup(argv[i] + 2));
 			option = format("-%c%s", argv[i][1], relpath);
 
-			/* if the argument only affects the preprocessed output then
-			 * it should not affect the compiling the .c file
-			 */
 			if (compopt_short(compopt_affects_cpp, argv[i])) {
 				args_add(cpp_args, option);
 			} else {
@@ -2012,9 +2006,6 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 				goto out;
 			}
 
-			/* if the argument only affects the preprocessed output then
-			 * it should not affect the compiling the .c file
-			 */
 			if (compopt_affects_cpp(argv[i])) {
 				args_add(cpp_args, argv[i]);
 				args_add(cpp_args, argv[i+1]);
@@ -2029,8 +2020,8 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 
 		/* other options */
 		if (argv[i][0] == '-') {
-			if (compopt_affects_cpp(argv[i]) || 
-			    compopt_prefix_affects_cpp(argv[i])) {
+			if (compopt_affects_cpp(argv[i])
+			    || compopt_prefix_affects_cpp(argv[i])) {
 				args_add(cpp_args, argv[i]);
 			} else {
 				args_add(stripped_args, argv[i]);
@@ -2386,7 +2377,7 @@ cc_reset(void)
 	free(cached_obj); cached_obj = NULL;
 	free(cached_stderr); cached_stderr = NULL;
 	free(cached_dep); cached_dep = NULL;
-	free(cached_dia); cached_dep = NULL;
+	free(cached_dia); cached_dia = NULL;
 	free(manifest_path); manifest_path = NULL;
 	time_of_compilation = 0;
 	if (included_files) {
@@ -2482,7 +2473,7 @@ ccache(int argc, char *argv[])
 	if (generating_dependencies) {
 		cc_log("Dependency file: %s", output_dep);
 	}
-	if (output_dia != 0) {
+	if (output_dia) {
 		cc_log("Diagnostic file: %s", output_dia);
 	}
 	cc_log("Object file: %s", output_obj);

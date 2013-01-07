@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Joel Rosdahl
+ * Copyright (C) 2010, 2012 Joel Rosdahl
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -92,6 +92,11 @@ TEST(dash_Xlinker_takes_arg)
 TEST(dash_xxx_doesnt_take_arg)
 {
 	CHECK(!compopt_takes_arg("-xxx"));
+}
+
+TEST(dash_iframework_prefix_affects_cpp)
+{
+	CHECK(compopt_prefix_affects_cpp("-iframework"));
 }
 
 TEST_SUITE_END
